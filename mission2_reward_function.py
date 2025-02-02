@@ -18,9 +18,12 @@ def reward_function(params):
     closest_waypoints = params['closest_waypoints'] # [int,int]. Agent의 현재 위치에서 가장 가깝게 위치한 두 waypoint의 index를 나타냄. Agent와의 유클리드 거리 계산법으로 구함. 첫 번째 값은 agent의 뒤에서 가장 가까운 waypoint를 나타내고, 두 번째 값은 agent의 앞에서 가장 가까운 waypoint를 나타냄. 가까운 waypoint를 찾을 때의 기준은 앞바퀴 위치.
     heading = params['heading'] # float, -180~180. 트랙의 x축에 대한 agent의 진행 방향(각도)를 나타냄.
     is_reversed = params['is_reversed'] # Boolean. Agent의 바퀴가 시계 방향으로 주행하면 True, 반시계 방향으로 주행하면 False.
+    current_steering_angle = params['steering_angle'] # float. -30~30.
 
     SPEED_THRESHOLD_straight = 3.0  # 직진 코스에서 속도 기준
     DIRECTION_THRESHOLD = 3.0
+
+    reward = 0.0 # 보상
 
     vehicle_length = 0.235
     lfd = 0.6
@@ -116,7 +119,9 @@ def reward_function(params):
             global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1],1]
             local_look_ahead_point = det_t.dot(global_look_ahead_point)
             theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
-            target_steering_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180/pi
+            target_steering_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180/pi * 1/6 # -30~30 정규화
+            steering_angle_error = abs(target_steering_angle - current_steering_angle)
+            reward += (60 - steering_angle_error) * 1/6 # 0~10 정규화
 
 
     return float(reward)
