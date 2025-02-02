@@ -24,6 +24,7 @@ def reward_function(params):
     DIRECTION_THRESHOLD = 3.0
 
     reward = 0.0 # 보상
+    minimum_reward = 1e-3
 
     vehicle_length = 0.235
     lfd = 0.6
@@ -120,8 +121,12 @@ def reward_function(params):
             local_look_ahead_point = det_t.dot(global_look_ahead_point)
             theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
             target_steering_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180/pi * 1/6 # -30~30 정규화
-            steering_angle_error = abs(target_steering_angle - current_steering_angle)
-            reward += (60 - steering_angle_error) * 1/6 # 0~10 정규화
+            # 목표값과 현재값의 부호가 일치하면 steering angle error를 계산하고 보상
+            if (target_steering_angle >= 0 and current_steering_angle >= 0) or (target_steering_angle < 0 and current_steering_angle < 0):
+                steering_angle_error = abs(target_steering_angle - current_steering_angle)
+                reward += max(minimum_reward, (30 - steering_angle_error) * 1 / 3)  # 0~10 정규화
+            else: # 목표값과 현재값의 부호가 다르면 최소 보상
+                reward += minimum_reward
 
 
     return float(reward)
