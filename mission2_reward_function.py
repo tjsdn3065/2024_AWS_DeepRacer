@@ -31,6 +31,9 @@ def reward_function(params):
     is_look_ahead_point = False
     look_ahead_point = None
 
+    expect_time = 10.0  # 원하는 시간
+    expect_steps = 145  # 원하는 스텝
+
     optimal_path = [
         (0.546942781193672, 2.646942781193672, 0),
         (0.7213277658761738, 2.2864970997890772, 0),
@@ -128,5 +131,18 @@ def reward_function(params):
             else: # 목표값과 현재값의 부호가 다르면 최소 보상
                 reward += minimum_reward
 
+    # 50steps마다 더 큰 보상 -> 더 빠르게 학습하기 위해
+    if (steps % 50) == 0 and progress >= (steps / expect_steps) * 100:
+        reward += 30.0
+
+    # 트랙 완주에 가까워질수록 더 큰 보상
+    if progress == 100:  # 완주 시
+        if steps < expect_time * 15:  # 기대 시간보다 15배 이내로 완주한 경우
+            reward += 100 * (expect_time * 15 / steps)
+        else:
+            reward += 100
+
+    elif is_offtrack:  # 트랙 이탈시
+        reward -= 50
 
     return float(reward)
