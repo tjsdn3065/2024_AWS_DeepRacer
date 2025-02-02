@@ -1,4 +1,5 @@
 from math import cos,sin,pi,sqrt,pow,atan2,tan
+import numpy as np
 
 def reward_function(params):
 
@@ -98,5 +99,24 @@ def reward_function(params):
                 look_ahead_point = point
                 is_look_ahead_point = True
                 break
+
+        if is_look_ahead_point:
+            radian_heading = heading * pi/180
+            t = np.array([
+                [cos(radian_heading), -sin(radian_heading), x],
+                [sin(radian_heading), cos(radian_heading), y],
+                [0, 0, 1]
+            ])
+
+            det_t = np.array([
+                [t[0][0], t[1][0], -(t[0][0] * x + t[1][0] * y)],
+                [t[0][1], t[1][1], -(t[0][1] * x + t[1][1] * y)],
+                [0, 0, 1]
+            ])
+            global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1],1]
+            local_look_ahead_point = det_t.dot(global_look_ahead_point)
+            theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
+            target_steering_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180/pi
+
 
     return float(reward)
