@@ -27,6 +27,7 @@ def reward_function(params):
     reward = 0.0 # 보상
     minimum_reward = 1e-3
 
+    vehicle_width = 0.107
     vehicle_length = 0.235
     lfd = 0.6
     is_look_ahead_point = False
@@ -97,6 +98,23 @@ def reward_function(params):
             if dist < min_dist:
                 min_dist = dist
                 closest_index = i
+
+        # 다음 점을 경로 순환에 맞게 처리
+        next_index = (closest_index + 1) % len(optimal_path)  # 순환 경로 처리
+        # 현재 위치와 그 다음 점을 연결하는 직선과의 거리 계산
+        point1 = optimal_path[closest_index]
+        point2 = optimal_path[next_index]
+        x0, y0 = x, y
+        x1, y1 = point1
+        x2, y2 = point2
+        # 점과 직선의 거리 계산
+        numerator = abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1)
+        denominator = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
+        distance_to_line = numerator / denominator
+        # 계산된 거리로 보상 업데이트 (예: 직선과의 거리가 작을수록 보상을 증가시키는 방식)
+        maximum_width = track_width + vehicle_width
+        reward += max(minimum_reward, (maximum_width - distance_to_line) * 10/maximum_width)
+
 
         # 구간에 따른 속도 보상
         if optimal_path[closest_index][2] == 1:
