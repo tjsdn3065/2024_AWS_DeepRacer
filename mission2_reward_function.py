@@ -1,3 +1,5 @@
+from math import cos,sin,pi,sqrt,pow,atan2,tan
+
 def reward_function(params):
 
     # Read input parameters
@@ -14,9 +16,15 @@ def reward_function(params):
     waypoints = params['waypoints'] # [[float,float],[float,float],....]. 트랙 중앙을 따라 정해진 waypoint의 위치를 순서대로 나열한 리스트. 순환 트랙의 경우 시작과 끝 지점의 waypoint는 같음.
     closest_waypoints = params['closest_waypoints'] # [int,int]. Agent의 현재 위치에서 가장 가깝게 위치한 두 waypoint의 index를 나타냄. Agent와의 유클리드 거리 계산법으로 구함. 첫 번째 값은 agent의 뒤에서 가장 가까운 waypoint를 나타내고, 두 번째 값은 agent의 앞에서 가장 가까운 waypoint를 나타냄. 가까운 waypoint를 찾을 때의 기준은 앞바퀴 위치.
     heading = params['heading'] # float, -180~180. 트랙의 x축에 대한 agent의 진행 방향(각도)를 나타냄.
+    is_reversed = params['is_reversed'] # Boolean. Agent의 바퀴가 시계 방향으로 주행하면 True, 반시계 방향으로 주행하면 False.
 
     SPEED_THRESHOLD_straight = 3.0  # 직진 코스에서 속도 기준
     DIRECTION_THRESHOLD = 3.0
+
+    vehicle_length = 0.235
+    lfd = 0.6
+    is_look_ahead_point = False
+    look_ahead_point = None
 
     optimal_path = [
         (0.546942781193672, 2.646942781193672, 0),
@@ -69,5 +77,26 @@ def reward_function(params):
         (0.800546369782337, 3.3790129889954623, 0),
         (0.5808430906019764, 3.0399891236094505, 0)
     ]
+
+    if not is_reversed: # 차량이 반시계 방향으로 주행하고 있다면
+        # 🔹 **가장 가까운 최적 경로점 찾기**
+        min_dist = float("inf")
+        closest_index = 0
+
+        for i, point in enumerate(optimal_path):
+            dist = sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2)
+            if dist < min_dist:
+                min_dist = dist
+                closest_index = i
+
+        # 🔹 **look-ahead point 찾기**
+        for i in range(closest_index, len(optimal_path)):
+            point = optimal_path[i]
+            dist = sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2)
+
+            if dist > lfd:
+                look_ahead_point = point
+                is_look_ahead_point = True
+                break
 
     return float(reward)
