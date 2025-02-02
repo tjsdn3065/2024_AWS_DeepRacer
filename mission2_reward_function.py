@@ -1,4 +1,4 @@
-from math import cos,sin,pi,sqrt,pow,atan2,tan
+from math import cos,sin,pi,sqrt,atan2
 import numpy as np
 
 def reward_function(params):
@@ -21,6 +21,7 @@ def reward_function(params):
     current_steering_angle = params['steering_angle'] # float. -30~30.
 
     SPEED_THRESHOLD_straight = 3.0  # 직진 코스에서 속도 기준
+    SPEED_THRESHOLD_curve = 2.0  # 곡선 코스에서 속도 기준
     DIRECTION_THRESHOLD = 3.0
 
     reward = 0.0 # 보상
@@ -96,6 +97,17 @@ def reward_function(params):
             if dist < min_dist:
                 min_dist = dist
                 closest_index = i
+
+        if optimal_path[closest_index][2] == 1:
+            if speed >= SPEED_THRESHOLD_straight:
+                reward += 10
+            else:
+                reward += 1e-3
+        else:
+            if speed <= SPEED_THRESHOLD_curve:
+                reward += 10
+            else:
+                reward += 1e-3
 
         # 🔹 **look-ahead point 찾기**
         for i in range(closest_index, len(optimal_path)):
