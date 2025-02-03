@@ -1,4 +1,4 @@
-from math import cos,sin,pi,sqrt,atan2
+from math import cos,sin,pi,sqrt,atan2, degrees
 import numpy as np
 
 def reward_function(params):
@@ -33,8 +33,16 @@ def reward_function(params):
     is_look_ahead_point = False
     look_ahead_point = None
 
+    radian_heading = heading * pi / 180
+
     expect_time = 10.0  # 원하는 시간
     expect_steps = 145  # 원하는 스텝
+
+    is_correct_heading = False
+    is_correct_distance = False
+    is_correct_speed = False
+    is_correct_position = False
+    is_correct_steering = False
 
     optimal_path = [
         (0.546942781193672, 2.646942781193672, 0, 0),
@@ -108,21 +116,36 @@ def reward_function(params):
         x1, y1 = point1
         x2, y2 = point2
 
+        # 최적 경로 벡터 V (Global 좌표계)
+        vector_global = np.array([x2 - x1, y2 - y1])  # [dx, dy]
+        rotation_matrix = np.array([
+            [cos(radian_heading), sin(radian_heading)],
+            [-sin(radian_heading), cos(radian_heading)]
+        ])
+        # 로컬 좌표계로 변환된 벡터
+        vector_local = rotation_matrix.dot(vector_global)
+        # 벡터 (1,0)과의 각도 오차 계산
+        vector_angle = atan2(vector_local[1], vector_local[0])  # 로컬 벡터의 방향
+        heading_error = abs(degrees(vector_angle))  # 도(°) 단위로 변환
+
+        # heading 오차가 5도 이하인지 확인
+        is_correct_heading = heading_error <= 5
+
         # 점과 직선의 거리 계산
         numerator = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
         denominator = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
         distance_to_line = numerator / denominator
 
-        # ✅ 1️⃣ 최적 경로와 가까운지 확인
+        # 최적 경로와 가까운지 확인
         is_correct_distance = distance_to_line <= vehicle_width / 2
 
-        # ✅ 2️⃣ 속도가 적절한지 확인
+        # 속도가 적절한지 확인
         if optimal_path[closest_index][2] == 1:  # 직선 구간
             is_correct_speed = speed >= SPEED_THRESHOLD_straight
         else:  # 곡선 구간
             is_correct_speed = speed <= SPEED_THRESHOLD_curve
 
-        # ✅ 3️⃣ 차량 위치가 적절한지 확인
+        # 차량 위치가 적절한지 확인
         is_correct_position = (optimal_path[closest_index][3] == 0 and is_left_of_center) or \
                               (optimal_path[closest_index][3] == 1 and not is_left_of_center)
 
@@ -136,9 +159,8 @@ def reward_function(params):
                 is_look_ahead_point = True
                 break
 
-        # ✅ 4️⃣ 조향 각도 오차가 작은지 확인
+        # 조향 각도 오차가 작은지 확인
         if is_look_ahead_point:
-            radian_heading = heading * pi / 180
             t = np.array([
                 [cos(radian_heading), -sin(radian_heading), x],
                 [sin(radian_heading), cos(radian_heading), y],
@@ -158,24 +180,24 @@ def reward_function(params):
 
             is_correct_steering = steering_angle_error <= 5  # 조향 오차가 5° 이하
 
-        # ✅ 5️⃣ 4가지 조건을 모두 만족할 때만 보상 지급
-        if is_correct_distance and is_correct_speed and is_correct_position and is_correct_steering:
+        # 5가지 조건을 모두 만족할 때만 보상 지급
+        if is_correct_heading and is_correct_distance and is_correct_speed and is_correct_position and is_correct_steering:
             reward += 20  # 4가지 조건을 만족해야만 보상 (높은 보상)
         else:
             reward += minimum_reward  # 하나라도 틀리면 최소 보상
 
-    # 50steps마다 더 큰 보상 -> 더 빠르게 학습하기 위해
-    if (steps % 50) == 0 and progress >= (steps / expect_steps) * 100:
-        reward += 30.0
+        # 50steps마다 더 큰 보상 -> 더 빠르게 학습하기 위해
+        if (steps % 50) == 0 and progress >= (steps / expect_steps) * 100:
+            reward += 30.0
 
-    # 트랙 완주에 가까워질수록 더 큰 보상
-    if progress == 100:  # 완주 시
-        if steps < expect_time * 15:  # 기대 시간보다 15배 이내로 완주한 경우
-            reward += 100 * (expect_time * 15 / steps)
-        else:
-            reward += 100
+        # 트랙 완주에 가까워질수록 더 큰 보상
+        if progress == 100:  # 완주 시
+            if steps < expect_time * 15:  # 기대 시간보다 15배 이내로 완주한 경우
+                reward += 100 * (expect_time * 15 / steps)
+            else:
+                reward += 100
 
-    elif is_offtrack:  # 트랙 이탈시
-        reward -= 50
+        elif is_offtrack:  # 트랙 이탈시
+            reward -= 50
 
     return float(reward)
