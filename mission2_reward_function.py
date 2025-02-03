@@ -113,8 +113,8 @@ def reward_function(params):
         # 현재 위치와 그 다음 점을 연결하는 직선과의 거리 계산
         point1 = optimal_path[closest_index]
         point2 = optimal_path[next_index]
-        x1 = point1[0] , y1 = point1[1]
-        x2 = point2[0] , y2 = point2[1]
+        x1, y1 = point1[0], point1[1]
+        x2, y2 = point2[0], point2[1]
 
         # 변환행렬
         t = np.array([
