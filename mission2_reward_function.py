@@ -101,6 +101,7 @@ def reward_function(params):
 
         # 다음 점을 경로 순환에 맞게 처리
         next_index = (closest_index + 1) % len(optimal_path)  # 순환 경로 처리
+
         # 현재 위치와 그 다음 점을 연결하는 직선과의 거리 계산
         point1 = optimal_path[closest_index]
         point2 = optimal_path[next_index]
@@ -125,12 +126,6 @@ def reward_function(params):
         is_correct_position = (optimal_path[closest_index][3] == 0 and is_left_of_center) or \
                               (optimal_path[closest_index][3] == 1 and not is_left_of_center)
 
-        # ✅ 4️⃣ 3가지 조건을 모두 만족할 때만 보상 지급
-        if is_correct_distance and is_correct_speed and is_correct_position:
-            reward += 10  # 3가지 조건을 만족해야만 보상 (높은 보상)
-        else:
-            reward += minimum_reward  # 하나라도 틀리면 최소 보상
-
         # 🔹 **look-ahead point 찾기**
         for i in range(closest_index, len(optimal_path)):
             point = optimal_path[i]
@@ -141,8 +136,9 @@ def reward_function(params):
                 is_look_ahead_point = True
                 break
 
+        # ✅ 4️⃣ 조향 각도 오차가 작은지 확인
         if is_look_ahead_point:
-            radian_heading = heading * pi/180
+            radian_heading = heading * pi / 180
             t = np.array([
                 [cos(radian_heading), -sin(radian_heading), x],
                 [sin(radian_heading), cos(radian_heading), y],
@@ -154,16 +150,19 @@ def reward_function(params):
                 [t[0][1], t[1][1], -(t[0][1] * x + t[1][1] * y)],
                 [0, 0, 1]
             ])
-            global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1],1]
+            global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1], 1]
             local_look_ahead_point = det_t.dot(global_look_ahead_point)
             theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
-            target_steering_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180/pi * 1/6 # -30~30 정규화
-            # 목표값과 현재값의 부호가 일치하면 steering angle error를 계산하고 보상
-            if (target_steering_angle >= 0 and current_steering_angle >= 0) or (target_steering_angle < 0 and current_steering_angle < 0):
-                steering_angle_error = abs(target_steering_angle - current_steering_angle)
-                reward += max(minimum_reward, (30 - steering_angle_error) * 1 / 3)  # 0~10 정규화
-            else: # 목표값과 현재값의 부호가 다르면 최소 보상
-                reward += minimum_reward
+            target_steering_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180 / pi * 1 / 6  # -30~30 정규화
+            steering_angle_error = abs(target_steering_angle - current_steering_angle)
+
+            is_correct_steering = steering_angle_error <= 5  # 조향 오차가 5° 이하
+
+        # ✅ 5️⃣ 4가지 조건을 모두 만족할 때만 보상 지급
+        if is_correct_distance and is_correct_speed and is_correct_position and is_correct_steering:
+            reward += 20  # 4가지 조건을 만족해야만 보상 (높은 보상)
+        else:
+            reward += minimum_reward  # 하나라도 틀리면 최소 보상
 
     # 50steps마다 더 큰 보상 -> 더 빠르게 학습하기 위해
     if (steps % 50) == 0 and progress >= (steps / expect_steps) * 100:
