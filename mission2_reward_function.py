@@ -113,31 +113,38 @@ def reward_function(params):
         # 현재 위치와 그 다음 점을 연결하는 직선과의 거리 계산
         point1 = optimal_path[closest_index]
         point2 = optimal_path[next_index]
-        x1, y1 = point1
-        x2, y2 = point2
+        x1 = point1[0] , y1 = point1[1]
+        x2 = point2[0] , y2 = point2[1]
 
-        # 최적 경로 벡터 V (Global 좌표계)
-        vector_global = np.array([x2 - x1, y2 - y1])  # [dx, dy]
-        rotation_matrix = np.array([
-            [cos(radian_heading), sin(radian_heading)],
-            [-sin(radian_heading), cos(radian_heading)]
+        # 변환행렬
+        t = np.array([
+            [cos(radian_heading), -sin(radian_heading), x],
+            [sin(radian_heading), cos(radian_heading), y],
+            [0, 0, 1]
         ])
-        # 로컬 좌표계로 변환된 벡터
-        vector_local = rotation_matrix.dot(vector_global)
-        # 벡터 (1,0)과의 각도 오차 계산
-        vector_angle = atan2(vector_local[1], vector_local[0])  # 로컬 벡터의 방향
-        heading_error = abs(degrees(vector_angle))  # 도(°) 단위로 변환
 
+        det_t = np.array([
+            [t[0][0], t[1][0], -(t[0][0] * x + t[1][0] * y)],
+            [t[0][1], t[1][1], -(t[0][1] * x + t[1][1] * y)],
+            [0, 0, 1]
+        ])
+
+        global_point1 = [x1, y1, 1]
+        global_point2 = [x2, y2, 1]
+        local_point1 = det_t.dot(global_point1)
+        local_point2 = det_t.dot(global_point2)
+        # 벡터 (1,0)과의 각도 오차 계산
+        vector_angle = atan2(local_point2[1] - local_point1[1], local_point2[0] - local_point1[0])  # 로컬 벡터의 방향
+        heading_error = abs(degrees(vector_angle))  # 도(°) 단위로 변환
         # heading 오차가 5도 이하인지 확인
         is_correct_heading = heading_error <= 5
-
         if is_correct_heading:
             reward += 5  # 트랙 방향과 정렬이 잘 맞을수록 보상 증가
 
         # 점과 직선의 거리 계산
         numerator = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
         denominator = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
-        distance_to_line = numerator / denominator
+        distance_to_line = numerator / denominator if denominator != 0 else float("inf")
 
         # 최적 경로와 가까운지 확인
         is_correct_distance = distance_to_line <= vehicle_width / 2
@@ -173,17 +180,6 @@ def reward_function(params):
 
         # 조향 각도 오차가 작은지 확인
         if is_look_ahead_point:
-            t = np.array([
-                [cos(radian_heading), -sin(radian_heading), x],
-                [sin(radian_heading), cos(radian_heading), y],
-                [0, 0, 1]
-            ])
-
-            det_t = np.array([
-                [t[0][0], t[1][0], -(t[0][0] * x + t[1][0] * y)],
-                [t[0][1], t[1][1], -(t[0][1] * x + t[1][1] * y)],
-                [0, 0, 1]
-            ])
             global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1], 1]
             local_look_ahead_point = det_t.dot(global_look_ahead_point)
             theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
