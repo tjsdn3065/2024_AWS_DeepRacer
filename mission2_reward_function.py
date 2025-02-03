@@ -115,30 +115,22 @@ def reward_function(params):
         maximum_width = track_width + vehicle_width
         reward += max(minimum_reward, (maximum_width - distance_to_line) * 10/maximum_width)
 
+        # 구간에 따른 속도와 차량 위치를 함께 고려한 보상
+        if optimal_path[closest_index][2] == 1:  # 직선 구간
+            correct_speed = speed >= SPEED_THRESHOLD_straight
+        else:  # 곡선 구간
+            correct_speed = speed <= SPEED_THRESHOLD_curve
 
-        # 구간에 따른 속도 보상
-        if optimal_path[closest_index][2] == 1:
-            if speed >= SPEED_THRESHOLD_straight:
-                reward += 10
-            else:
-                reward += minimum_reward
-        else:
-            if speed <= SPEED_THRESHOLD_curve:
-                reward += 10
-            else:
-                reward += minimum_reward
+        correct_position = (optimal_path[closest_index][3] == 0 and is_left_of_center) or \
+                           (optimal_path[closest_index][3] == 1 and not is_left_of_center)
 
-        # 최적 경로에 의한 트랙에서의 차량의 위치 보상
-        if optimal_path[closest_index][3] == 0:
-            if is_left_of_center:
-                reward += 10
-            else:
-                reward += minimum_reward
+        # 속도와 위치가 모두 올바른 경우 최대 보상
+        if correct_speed and correct_position:
+            reward += 15  # 속도(10) + 위치(5)
+        elif correct_speed or correct_position:
+            reward += 5  # 하나만 올바른 경우 보상 감소
         else:
-            if not is_left_of_center:
-                reward += 10
-            else:
-                reward += minimum_reward
+            reward += minimum_reward  # 둘 다 틀린 경우 최소 보상
 
         # 🔹 **look-ahead point 찾기**
         for i in range(closest_index, len(optimal_path)):
