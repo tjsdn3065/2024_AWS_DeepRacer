@@ -131,6 +131,9 @@ def reward_function(params):
         # heading 오차가 5도 이하인지 확인
         is_correct_heading = heading_error <= 5
 
+        if is_correct_heading:
+            reward += 5  # 트랙 방향과 정렬이 잘 맞을수록 보상 증가
+
         # 점과 직선의 거리 계산
         numerator = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
         denominator = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
@@ -139,15 +142,24 @@ def reward_function(params):
         # 최적 경로와 가까운지 확인
         is_correct_distance = distance_to_line <= vehicle_width / 2
 
+        if is_correct_distance:
+            reward += 5  # 최적 경로와의 거리 유지
+
         # 속도가 적절한지 확인
         if optimal_path[closest_index][2] == 1:  # 직선 구간
             is_correct_speed = speed >= SPEED_THRESHOLD_straight
         else:  # 곡선 구간
             is_correct_speed = speed <= SPEED_THRESHOLD_curve
 
+        if is_correct_speed:
+            reward += 5  # 구간별 적절한 속도를 유지
+
         # 차량 위치가 적절한지 확인
         is_correct_position = (optimal_path[closest_index][3] == 0 and is_left_of_center) or \
                               (optimal_path[closest_index][3] == 1 and not is_left_of_center)
+
+        if is_correct_position:
+            reward += 3  # 트랙의 올바른 방향(왼쪽/오른쪽) 유지
 
         # 🔹 **look-ahead point 찾기**
         for i in range(closest_index, len(optimal_path)):
@@ -180,11 +192,12 @@ def reward_function(params):
 
             is_correct_steering = steering_angle_error <= 5  # 조향 오차가 5° 이하
 
-        # 5가지 조건을 모두 만족할 때만 보상 지급
+        if is_correct_steering:
+            reward += 2  # 조향 오차가 적을수록 보상 증가
+
+        # 5가지 조건을 모두 만족하면 추가 보상
         if is_correct_heading and is_correct_distance and is_correct_speed and is_correct_position and is_correct_steering:
-            reward += 20  # 4가지 조건을 만족해야만 보상 (높은 보상)
-        else:
-            reward += minimum_reward  # 하나라도 틀리면 최소 보상
+            reward += 10  # 완벽한 주행을 하면 추가 보상
 
         # 50steps마다 더 큰 보상 -> 더 빠르게 학습하기 위해
         if (steps % 50) == 0 and progress >= (steps / expect_steps) * 100:
