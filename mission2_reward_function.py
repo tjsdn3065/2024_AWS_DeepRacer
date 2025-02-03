@@ -137,78 +137,79 @@ def reward_function(params):
         vector_angle = atan2(local_point2[1] - local_point1[1], local_point2[0] - local_point1[0])  # 로컬 벡터의 방향
         heading_error = abs(degrees(vector_angle))  # 도(°) 단위로 변환
         # heading 오차가 5도 이하인지 확인
-        is_correct_heading = heading_error <= 5
+        is_correct_heading = heading_error <= 15
 
         if is_correct_heading:
             reward += 5  # 트랙 방향과 정렬이 잘 맞을수록 보상 증가
+
+            # 점과 직선의 거리 계산
+            numerator = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
+            denominator = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
+            distance_to_line = numerator / denominator if denominator != 0 else float("inf")
+
+            # 최적 경로와 가까운지 확인
+            is_correct_distance = distance_to_line <= vehicle_width / 2
+
+            if is_correct_distance:
+                reward += 5  # 최적 경로와의 거리 유지
+            else:
+                reward += minimum_reward
+
+            # 속도가 적절한지 확인
+            # 예시: 직선 구간에서는 4.00 m/s, 곡선 구간에서는 1.00 m/s를 올바른 속도로 판단
+            if optimal_path[closest_index][2] == 1:  # 직선 구간
+                is_correct_speed = (speed == 4.00)
+            else:  # 곡선 구간
+                is_correct_speed = (speed == 1.00)
+
+            if is_correct_speed:
+                reward += 10  # 구간별 적절한 속도를 유지
+            else:
+                reward += minimum_reward
+
+            # 차량 위치가 적절한지 확인
+            is_correct_position = (optimal_path[closest_index][3] == 0 and is_left_of_center) or \
+                                  (optimal_path[closest_index][3] == 1 and not is_left_of_center)
+
+            if is_correct_position:
+                reward += 5  # 트랙의 올바른 방향(왼쪽/오른쪽) 유지
+            else:
+                reward += minimum_reward
+
+            # 🔹 **look-ahead point 찾기**
+            for i in range(closest_index, len(optimal_path)):
+                point = optimal_path[i]
+                dist = sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2)
+
+                if dist > lfd:
+                    look_ahead_point = point
+                    is_look_ahead_point = True
+                    break
+
+            # 조향 각도 오차가 작은지 확인
+            if is_look_ahead_point:
+                global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1], 1]
+                local_look_ahead_point = det_t.dot(global_look_ahead_point)
+                theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
+                # 기존 pure pursuit 계산 (연속값)
+                continuous_target_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180 / pi * (
+                            1 / 6)  # -30 ~ 30 범위
+
+                # 허용 discrete 조향각 리스트
+                allowed_angles = np.array(
+                    [-30, -25.7, -21.4, -17.1, -12.9, -8.6, -4.3, 0, 4.3, 8.6, 12.9, 17.1, 21.4, 25.7, 30])
+                # continuous_target_angle을 가장 가까운 discrete 값으로 매핑
+                target_steering_angle = allowed_angles[np.argmin(np.abs(allowed_angles - continuous_target_angle))]
+
+                steering_angle_error = abs(target_steering_angle - current_steering_angle)
+                is_correct_steering = steering_angle_error == 0  # 혹은 discrete 값의 간격에 맞춰 임계값 조정
+
+            if is_correct_steering:
+                reward += 10  # 조향 오차 보상
+            else:
+                reward += minimum_reward
         else:
-            reward += minimum_reward
-
-        # 점과 직선의 거리 계산
-        numerator = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
-        denominator = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
-        distance_to_line = numerator / denominator if denominator != 0 else float("inf")
-
-        # 최적 경로와 가까운지 확인
-        is_correct_distance = distance_to_line <= vehicle_width / 2
-
-        if is_correct_distance:
-            reward += 5  # 최적 경로와의 거리 유지
-        else:
-            reward += minimum_reward
-
-        # 속도가 적절한지 확인
-        # 예시: 직선 구간에서는 4.00 m/s, 곡선 구간에서는 1.00 m/s를 올바른 속도로 판단
-        if optimal_path[closest_index][2] == 1:  # 직선 구간
-            is_correct_speed = (speed == 4.00)
-        else:  # 곡선 구간
-            is_correct_speed = (speed == 1.00)
-
-        if is_correct_speed:
-            reward += 10  # 구간별 적절한 속도를 유지
-        else:
-            reward += minimum_reward
-
-        # 차량 위치가 적절한지 확인
-        is_correct_position = (optimal_path[closest_index][3] == 0 and is_left_of_center) or \
-                              (optimal_path[closest_index][3] == 1 and not is_left_of_center)
-
-        if is_correct_position:
-            reward += 5  # 트랙의 올바른 방향(왼쪽/오른쪽) 유지
-        else:
-            reward += minimum_reward
-
-        # 🔹 **look-ahead point 찾기**
-        for i in range(closest_index, len(optimal_path)):
-            point = optimal_path[i]
-            dist = sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2)
-
-            if dist > lfd:
-                look_ahead_point = point
-                is_look_ahead_point = True
-                break
-
-        # 조향 각도 오차가 작은지 확인
-        if is_look_ahead_point:
-            global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1], 1]
-            local_look_ahead_point = det_t.dot(global_look_ahead_point)
-            theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
-            # 기존 pure pursuit 계산 (연속값)
-            continuous_target_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180 / pi * (1 / 6)  # -30 ~ 30 범위
-
-            # 허용 discrete 조향각 리스트
-            allowed_angles = np.array(
-                [-30, -25.7, -21.4, -17.1, -12.9, -8.6, -4.3, 0, 4.3, 8.6, 12.9, 17.1, 21.4, 25.7, 30])
-            # continuous_target_angle을 가장 가까운 discrete 값으로 매핑
-            target_steering_angle = allowed_angles[np.argmin(np.abs(allowed_angles - continuous_target_angle))]
-
-            steering_angle_error = abs(target_steering_angle - current_steering_angle)
-            is_correct_steering = steering_angle_error == 0  # 혹은 discrete 값의 간격에 맞춰 임계값 조정
-
-        if is_correct_steering:
-            reward += 10  # 조향 오차 보상
-        else:
-            reward += minimum_reward
+            reward *= 0
 
         # 5가지 조건을 모두 만족하면 추가 보상
         if is_correct_heading and is_correct_distance and is_correct_speed and is_correct_position and is_correct_steering:
