@@ -104,33 +104,32 @@ def reward_function(params):
         # 현재 위치와 그 다음 점을 연결하는 직선과의 거리 계산
         point1 = optimal_path[closest_index]
         point2 = optimal_path[next_index]
-        x0, y0 = x, y
         x1, y1 = point1
         x2, y2 = point2
+
         # 점과 직선의 거리 계산
-        numerator = abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1)
+        numerator = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
         denominator = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
         distance_to_line = numerator / denominator
-        # 계산된 거리로 보상 업데이트 (예: 직선과의 거리가 작을수록 보상을 증가시키는 방식)
-        maximum_width = track_width + vehicle_width
-        reward += max(minimum_reward, (maximum_width - distance_to_line) * 10/maximum_width)
 
-        # 구간에 따른 속도와 차량 위치를 함께 고려한 보상
+        # ✅ 1️⃣ 최적 경로와 가까운지 확인
+        is_correct_distance = distance_to_line <= vehicle_width / 2
+
+        # ✅ 2️⃣ 속도가 적절한지 확인
         if optimal_path[closest_index][2] == 1:  # 직선 구간
-            correct_speed = speed >= SPEED_THRESHOLD_straight
+            is_correct_speed = speed >= SPEED_THRESHOLD_straight
         else:  # 곡선 구간
-            correct_speed = speed <= SPEED_THRESHOLD_curve
+            is_correct_speed = speed <= SPEED_THRESHOLD_curve
 
-        correct_position = (optimal_path[closest_index][3] == 0 and is_left_of_center) or \
-                           (optimal_path[closest_index][3] == 1 and not is_left_of_center)
+        # ✅ 3️⃣ 차량 위치가 적절한지 확인
+        is_correct_position = (optimal_path[closest_index][3] == 0 and is_left_of_center) or \
+                              (optimal_path[closest_index][3] == 1 and not is_left_of_center)
 
-        # 속도와 위치가 모두 올바른 경우 최대 보상
-        if correct_speed and correct_position:
-            reward += 15  # 속도(10) + 위치(5)
-        elif correct_speed or correct_position:
-            reward += 5  # 하나만 올바른 경우 보상 감소
+        # ✅ 4️⃣ 3가지 조건을 모두 만족할 때만 보상 지급
+        if is_correct_distance and is_correct_speed and is_correct_position:
+            reward += 10  # 3가지 조건을 만족해야만 보상 (높은 보상)
         else:
-            reward += minimum_reward  # 둘 다 틀린 경우 최소 보상
+            reward += minimum_reward  # 하나라도 틀리면 최소 보상
 
         # 🔹 **look-ahead point 찾기**
         for i in range(closest_index, len(optimal_path)):
