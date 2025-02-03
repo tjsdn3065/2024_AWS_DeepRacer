@@ -32,11 +32,11 @@ def reward_function(params):
     MAX_OPTIMAL_DISTANCE = track_width * 0.5  # 최적 경로와의 최대 허용 거리
 
     # 가중치 (각 항목별 보상 기여도)
-    weight_heading = 3.0
-    weight_steering = 3.0
-    weight_distance = 1.0
+    weight_heading = 0.0
+    weight_steering = 1.0
+    weight_distance = 0.0
     weight_speed = 1.0
-    weight_position = 1.0
+    weight_position = 0.0
 
     # 보상 요소 초기화
     heading_reward = 0.0
@@ -212,16 +212,17 @@ def reward_function(params):
     # 모든 조건이 매우 우수하면 보너스 추가 (예: heading 오차 5° 미만, 속도 오차 0.2 미만, 조향 오차 5° 미만, 경로와의 거리가 vehicle_width/2 미만)
     if (heading_error < 5 and speed_error < 0.2 and (
             is_look_ahead_point and steering_angle_error < 5) and distance_to_line < (vehicle_width / 2)):
-        total_reward += 10
+        pass
+        # total_reward += 10
 
     # ★ 최적 경로에서 크게 벗어난 경우 패널티 적용
     if distance_to_line > MAX_OPTIMAL_DISTANCE:
-        total_reward *= 0.1
+        pass#total_reward *= 0.1
     elif distance_to_line > MAX_OPTIMAL_DISTANCE * 0.8:
-        total_reward *= 0.3
+        pass#total_reward *= 0.3
     elif distance_to_line > MAX_OPTIMAL_DISTANCE * 0.6:
-        total_reward *= 0.6
+        pass#total_reward *= 0.6
 
-    total_reward = max(total_reward, minimum_reward)
+    # total_reward = max(total_reward, minimum_reward)
 
     return float(total_reward)
