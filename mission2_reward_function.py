@@ -153,10 +153,11 @@ def reward_function(params):
             reward += 5  # 최적 경로와의 거리 유지
 
         # 속도가 적절한지 확인
+        # 예시: 직선 구간에서는 4.00 m/s, 곡선 구간에서는 1.33 m/s를 올바른 속도로 판단
         if optimal_path[closest_index][2] == 1:  # 직선 구간
-            is_correct_speed = speed >= SPEED_THRESHOLD_straight
+            is_correct_speed = (speed == 4.00)
         else:  # 곡선 구간
-            is_correct_speed = speed <= SPEED_THRESHOLD_curve
+            is_correct_speed = (speed == 1.33)
 
         if is_correct_speed:
             reward += 5  # 구간별 적절한 속도를 유지
@@ -183,10 +184,14 @@ def reward_function(params):
             global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1], 1]
             local_look_ahead_point = det_t.dot(global_look_ahead_point)
             theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
-            target_steering_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180 / pi * 1 / 6  # -30~30 정규화
-            steering_angle_error = abs(target_steering_angle - current_steering_angle)
+            # 순수 추종 공식으로 목표 조향각 계산 (단위: 도)
+            continuous_target = atan2(2 * vehicle_length * sin(theta), lfd) * 180 / pi
+            # 이산 액션 스페이스에 맞게 가장 가까운 10° 단위 (-30~30)로 반올림
+            target_steering_angle = max(-30, min(30, round(continuous_target / 10) * 10))
 
-            is_correct_steering = steering_angle_error <= 5  # 조향 오차가 5° 이하
+            steering_angle_error = abs(target_steering_angle - current_steering_angle)
+            # 이산 값이므로 오차가 0이면 올바른 조향 선택, 아니면 보상 미부여 또는 약한 보상 처리
+            is_correct_steering = (steering_angle_error == 0)
 
         if is_correct_steering:
             reward += 2  # 조향 오차가 적을수록 보상 증가
