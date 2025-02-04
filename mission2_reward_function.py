@@ -1,7 +1,6 @@
 from math import cos, sin, pi, sqrt, atan2, degrees
 import numpy as np
 
-
 def reward_function(params):
     # Read input parameters
     x = params['x']
@@ -24,18 +23,19 @@ def reward_function(params):
     vehicle_width = 0.107
     vehicle_length = 0.235
     lfd = 0.6
-    steering_angle_error = None
     minimum_reward = 1e-3
     expect_time = 10.0  # desired time
     expect_steps = 145  # desired steps
     MAX_STEERING_ERROR = 10  # 최대 조향 오차 (°)
-    MAX_OPTIMAL_DISTANCE = track_width * 0.5  # 최적 경로와의 최대 허용 거리
+    MAX_OPTIMAL_DISTANCE = vehicle_width  # 최적 경로와의 최대 허용 거리
+    SPEED_THRESHOLD_straight = 3.0  # 직진 코스에서 속도 기준
+    SPEED_THRESHOLD_curve = 1.0  # 곡선 구간에서 속도 기준
 
     # 가중치 (각 항목별 보상 기여도)
-    weight_heading = 0.0
-    weight_steering = 1.0
-    weight_distance = 0.0
-    weight_speed = 1.0
+    weight_heading = 2.0
+    weight_steering = 2.0
+    weight_distance = 2.0
+    weight_speed = 2.0
     weight_position = 0.0
 
     # 보상 요소 초기화
@@ -52,7 +52,7 @@ def reward_function(params):
     if is_reversed or is_offtrack:
         return float(minimum_reward)
 
-    # 최적 경로 (예시 데이터)
+    # 최적 경로 (예시 데이터; 각 튜플: (x, y, 구간타입, 위치정보))
     optimal_path = [
         (0.546942781193672, 2.646942781193672, 0, 0),
         (0.7213277658761738, 2.2864970997890772, 0, 0),
@@ -128,8 +128,8 @@ def reward_function(params):
         [0, 0, 1]
     ])
     det_t = np.array([
-        [t[0][0], t[1][0], -(t[0][0] * x + t[1][0] * y)],
-        [t[0][1], t[1][1], -(t[0][1] * x + t[1][1] * y)],
+        [t[0][0], t[1][0], -(t[0][0]*x + t[1][0]*y)],
+        [t[0][1], t[1][1], -(t[0][1]*x + t[1][1]*y)],
         [0, 0, 1]
     ])
 
@@ -142,39 +142,34 @@ def reward_function(params):
     # ★ 경로 선과 차량 진행 방향(x축) 사이의 각도 오차 계산 (heading error)
     vector_angle = atan2(local_point2[1] - local_point1[1], local_point2[0] - local_point1[0])
     heading_error = abs(degrees(vector_angle))
-    # 최대 15°까지 선형 보상: error=0 → 10점, error=15° → 0점
-    max_heading_error = 15.0
+    max_heading_error = 10.0
     heading_error_capped = min(heading_error, max_heading_error)
-    heading_reward = max(minimum_reward,(1 - (heading_error_capped / max_heading_error)) * 10)
+    heading_reward = max(minimum_reward, (1 - (heading_error_capped / max_heading_error)) * 10)
 
     # ★ 차량과 최적 경로 선 사이의 수직 거리 계산
     numerator = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
     denominator = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
     distance_to_line = numerator / denominator if denominator != 0 else float("inf")
-    # 거리가 0 → 10점, MAX_OPTIMAL_DISTANCE일 때 0점 (선형 보상)
-    distance_reward = max(minimum_reward, (MAX_OPTIMAL_DISTANCE - distance_to_line) / MAX_OPTIMAL_DISTANCE * 10)
+    distance_error = min(distance_to_line, MAX_OPTIMAL_DISTANCE)
+    distance_reward = max(minimum_reward, (1 - (distance_error / MAX_OPTIMAL_DISTANCE)) * 10)
 
     # ★ 속도 보상 (연속적 평가)
-    # 직선 구간: 목표 3.0 m/s, 곡선 구간: 목표 1.0 m/s
+    speed_error = None
     if point1[2] == 1:  # 직선 구간
-        target_speed = 3.0
-        speed_tolerance = 0.5
-    else:  # 곡선 구간
-        target_speed = 1.0
-        speed_tolerance = 0.3
-    speed_error = abs(speed - target_speed)
-    # 속도 오차 0 → 10점, 오차가 tolerance 이상이면 0점
-    speed_reward = max(minimum_reward, (1 - min(speed_error / speed_tolerance, 1))* 10)
+        target_speed = 4.0
+        speed_tolerance = 1.0
+        speed_error = min(abs(target_speed - speed), speed_tolerance)
+        speed_reward = max(minimum_reward, (1 - (speed_error / speed_tolerance)) * 10)
 
+    is_position_condition = False
     # ★ 위치 보상: optimal_path에 정의된 위치 정보와 차량의 상대적 위치 비교
     if (point1[3] == 0 and is_left_of_center) or (point1[3] == 1 and not is_left_of_center):
         position_reward = 10
+        is_position_condition = True
     else:
         position_reward = minimum_reward
 
     # ★ 조향각(steering) 보상
-    # look-ahead point를 이용해 pure pursuit 방식으로 목표 조향각(continuous)을 계산한 후,
-    # 미리 정의한 discrete 값(allowed_angles)으로 매핑
     is_look_ahead_point = False
     look_ahead_point = None
     for i in range(closest_index, len(optimal_path)):
@@ -189,16 +184,10 @@ def reward_function(params):
         global_look_ahead_point = [look_ahead_point[0], look_ahead_point[1], 1]
         local_look_ahead_point = det_t.dot(global_look_ahead_point)
         theta = atan2(local_look_ahead_point[1], local_look_ahead_point[0])
-        # pure pursuit 공식에 의한 연속 목표 조향각 (예상 범위: -30° ~ 30°)
-        continuous_target_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180 / pi
-        # discrete action space에 맞추어 매핑
-        allowed_angles = np.array(
-            [-30, -25.7, -21.4, -17.1, -12.9, -8.6, -4.3, 0, 4.3, 8.6, 12.9, 17.1, 21.4, 25.7, 30])
-        target_steering_angle = allowed_angles[np.argmin(np.abs(allowed_angles - continuous_target_angle))]
-        steering_angle_error = abs(target_steering_angle - current_steering_angle)
-        # 조향 오차가 0 → 10점, 최대 오차(MAX_STEERING_ERROR)일 때 0점 (선형 보상)
-        steering_error_capped = min(steering_angle_error, MAX_STEERING_ERROR)
-        steering_reward = max(minimum_reward, (1 - (steering_error_capped / MAX_STEERING_ERROR)) * 10)
+        # pure pursuit 공식에 의한 연속 목표 조향각 (°)
+        target_steering_angle = atan2(2 * vehicle_length * sin(theta), lfd) * 180 / pi
+        steering_angle_error = min(abs(target_steering_angle - current_steering_angle), MAX_STEERING_ERROR)
+        steering_reward = max(10 - steering_angle_error, minimum_reward)
     else:
         steering_reward = minimum_reward
 
@@ -209,20 +198,27 @@ def reward_function(params):
                     weight_speed * speed_reward +
                     weight_position * position_reward)
 
-    # 모든 조건이 매우 우수하면 보너스 추가 (예: heading 오차 5° 미만, 속도 오차 0.2 미만, 조향 오차 5° 미만, 경로와의 거리가 vehicle_width/2 미만)
-    if (heading_error < 5 and speed_error < 0.2 and (
-            is_look_ahead_point and steering_angle_error < 5) and distance_to_line < (vehicle_width / 2)):
-        pass
-        # total_reward += 10
+    # ★ 보너스: 모든 조건이 매우 우수하면 추가 보상
+    if is_position_condition and heading_error < 1 and (speed_error is not None and speed_error < 0.2) and \
+       (is_look_ahead_point and abs(target_steering_angle - current_steering_angle) < 1) and \
+       distance_to_line < (MAX_OPTIMAL_DISTANCE / 5):
+        total_reward += 200
 
-    # ★ 최적 경로에서 크게 벗어난 경우 패널티 적용
-    if distance_to_line > MAX_OPTIMAL_DISTANCE:
-        pass#total_reward *= 0.1
-    elif distance_to_line > MAX_OPTIMAL_DISTANCE * 0.8:
-        pass#total_reward *= 0.3
-    elif distance_to_line > MAX_OPTIMAL_DISTANCE * 0.6:
-        pass#total_reward *= 0.6
+    if progress > 80:
+        total_reward += 20  # 트랙 진행률 80% 이상 추가 보상
+    elif progress > 90:
+        total_reward += 50  # 90% 이상 추가 보상
+    elif progress == 100:
+        total_reward += 200  # 완주 시 큰 보상
 
-    # total_reward = max(total_reward, minimum_reward)
+    # ★ 최적 경로에서 벗어난 정도에 따른 패널티 (제곱함수 적용)
+    if distance_to_line <= MAX_OPTIMAL_DISTANCE:
+        # 거리 비율에 대해 제곱 함수를 적용하여 부드럽게 감소하는 보상 계수 산출
+        penalty_factor = (1 - (distance_to_line / MAX_OPTIMAL_DISTANCE)) ** 2
+    else:
+        penalty_factor = 0.1  # 최대 허용 거리보다 멀면 강한 패널티
+    total_reward *= penalty_factor
+
+    total_reward = max(total_reward, minimum_reward)
 
     return float(total_reward)
